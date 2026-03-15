@@ -36,7 +36,8 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     query: str
-    budget: str
+    budget: int
+    city_from: str = ""
     city: str
     dates: str
     search_tickets: bool
@@ -190,10 +191,17 @@ tools_schema = [
 
 SYSTEM_PROMPT = """
 Ты - ИИ-агент по подбору авиа и жд билетов и составлению персональных туров.
+Бюджет пользователя задаётся по шкале от 1 до 10:
+- 1-2: минимальный (хостелы, плацкарт, самый дешёвый транспорт, бюджетная еда)
+- 3-4: экономный (недорогие гостиницы, купе, лоукостеры)
+- 5-6: средний (хорошие 3-4* отели, комфортный транспорт, рестораны среднего уровня)
+- 7-8: комфортный/высокий (4-5* отели, бизнес-класс поезда, хорошие рестораны)
+- 9-10: премиум/люкс (5* отели, бизнес-класс авиа, лучшие рестораны, VIP-услуги)
+Подбирай варианты, соответствующие указанному уровню бюджета.
 Отвечай структурировано в формате JSON.
 Твой ответ должен строго соответствовать следующей структуре JSON:
 {
-  "route_and_hotels": "Строка в формате Markdown. Здесь опиши маршрут, как лучше добраться (поезд или самолет). Если были найдены авиабилеты - обязательно выведи ВСЕ найденные варианты (до 5 штук) списком и добавь небольшой анализ: какой вариант лучше подходит под предпочтения и бюджет пользователя. ВАЖНО: цены на авиабилеты уже указаны за билеты ТУДА И ОБРАТНО. Если город в РФ - вызови функцию get_ru_hotel_links и посоветуй полученные ссылки. Если вне РФ - ищи отели функцией search_hotels_abroad. НИКОГДА не упоминай пользователю технические детали работы, названия функций (get_ru_hotel_links, search_hotels_abroad и т.д.) или фразы в духе 'поиск через функции был запрещен'. Общайся максимально естественно, как живой заботливый турагент.",
+  "route_and_hotels": "Строка в формате Markdown. Здесь опиши маршрут. Если были найдены авиабилеты - выведи ВСЕ найденные варианты (до 5 штук) списком. ВАЖНО ПРО ОТЕЛИ: Если ищешь отели через функцию search_hotels_abroad, она вернет поле 'photo' со ссылкой на картинку отеля. ОБЯЗАТЕЛЬНО вставляй эти фотографии в свой Markdown-ответ используя синтаксис: `![Название отеля](ссылка_на_картинку)`. Картинка должна идти сразу после названия отеля, чтобы ответ выглядел как красивый каталог. Если город в РФ - вызови get_ru_hotel_links и просто дай ссылки. Общайся максимально естественно, как живой турагент.",
   "tours": [
     {
       "title": "Название тура",
@@ -202,8 +210,6 @@ SYSTEM_PROMPT = """
   ],
   "total_price": "Примерная цена за всю поездку текстом"
 }
-Пользователь может выбрать до 3 туров, поэтому в массиве tours предоставь 3 разных интересных варианта (или больше/меньше в зависимости от контекста).
-Если это продолжение беседы и пользователь просит подробности одного тура, в массиве tours можешь вернуть только этот 1 тур с более детальным описанием, или вообще оставить массив пустым, если это просто ответ на вопрос (тогда пиши ответ в route_and_hotels).
 """
 
 @app.post("/api/chat")
@@ -216,7 +222,9 @@ async def chat_endpoint(req: ChatRequest):
         
     # Context message
     context = f"Текущий запрос пользователя: {req.query}\n"
-    context += f"Бюджет: {req.budget}\n"
+    context += f"Бюджет (шкала 1-10, где 1=минимальный/хостелы/плацкарт, 5=средний/комфорт, 10=люкс/бизнес-класс): {req.budget}\n"
+    if req.city_from:
+        context += f"Город отправления: {req.city_from}\n"
     context += f"Город назначения: {req.city}\n"
     context += f"Даты: {req.dates}\n"
     context += f"Искать билеты (разрешено функциями): {'Да' if req.search_tickets else 'Нет'}\n"
@@ -276,18 +284,19 @@ async def chat_endpoint(req: ChatRequest):
         # OpenRouter returns markdown blocks like ```json ... ``` sometimes, 
         # so we need to clean the string before parsing it.
         content = message.content
-        if content.startswith("```json"):
-            content = content[7:]
-        if content.endswith("```"):
-            content = content[:-3]
-        
-        # Some models use ``` instead of ```json
-        if content.startswith("```"):
-            content = content[3:]
-            
-        content = content.strip()
-            
-        return json.loads(content)
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            import re
+            content_fixed = re.sub(r'(?<!\\)\\(?!["\\/bfnrtu])', r'\\\\', content)
+            try:
+                return json.loads(content_fixed)
+            except json.JSONDecodeError:
+                return {
+                    "route_and_hotels": content or "Не удалось обработать ответ.",
+                    "tours": [],
+                    "total_price": "-"
+                }
 
     except json.JSONDecodeError as e:
         print(f"JSON Decode Error: {e}")
