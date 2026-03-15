@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Travel Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        .markdown-body h1, .markdown-body h2, .markdown-body h3 { font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
+        .markdown-body h1 { font-size: 1.5em; }
+        .markdown-body h2 { font-size: 1.25em; }
+        .markdown-body p { margin-bottom: 0.5em; }
+        .markdown-body ul { list-style-type: disc; margin-left: 1.5em; margin-bottom: 1em; }
+        .markdown-body li { margin-bottom: 0.25em; }
+        .markdown-body a { color: #2563eb; text-decoration: underline; }
+        .markdown-body strong { font-weight: bold; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans h-screen flex flex-col">
+    <div id="app" class="flex flex-col h-full max-w-4xl mx-auto w-full bg-white shadow-xl overflow-hidden">
+        
+        <!-- Header -->
+        <header class="bg-blue-600 text-white p-4 text-center text-xl font-bold shadow-md z-10">
+            AI Travel Agent 🌍✈️
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="flex-1 overflow-y-auto p-6 flex flex-col space-y-6 relative">
+            
+            <!-- Welcome Screen (Centered Inputs) -->
+            <div v-if="messages.length === 0" class="flex flex-col items-center justify-center h-full space-y-6 px-4">
+                <h2 class="text-2xl font-bold text-gray-700 text-center mb-4">Спланируйте идеальное путешествие</h2>
+                
+                <div class="w-full max-w-lg space-y-4 bg-gray-50 p-6 rounded-xl border border-gray-200">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Какой тур вы хотите? (веселый, музейный, архитектурный...)</label>
+                        <input v-model="query" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Например: хочу музейный тур с вкусной едой">
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Город назначения</label>
+                            <input v-model="city" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Например: Санкт-Петербург">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Даты (с - по)</label>
+                            <input v-model="dates" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Например: 2026-05-10 - 2026-05-15">
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Бюджет</label>
+                        <input v-model="budget" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Например: 50 000 руб">
+                    </div>
+
+                    <div class="flex items-center space-x-4 pt-2">
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" v-model="search_tickets" class="rounded text-blue-600 w-5 h-5">
+                            <span class="text-sm font-medium text-gray-700">Найти билеты</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="checkbox" v-model="search_hotels" class="rounded text-blue-600 w-5 h-5">
+                            <span class="text-sm font-medium text-gray-700">Найти отели</span>
+                        </label>
+                    </div>
+
+                    <button @click="startChat" :disabled="loading" class="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:bg-blue-400">
+                        {{ loading ? 'Думаю...' : 'Подобрать тур' }}
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chat Messages -->
+            <div v-for="(msg, index) in messages" :key="index" class="flex flex-col mb-4">
+                <!-- User Message -->
+                <div v-if="msg.role === 'user'" class="self-end bg-blue-100 text-blue-900 p-4 rounded-2xl rounded-tr-none max-w-[80%] shadow-sm">
+                    <p class="whitespace-pre-wrap">{{ msg.content }}</p>
+                </div>
+                
+                <!-- Assistant Message (Document Style) -->
+                <div v-else class="self-start bg-white border border-gray-200 p-6 rounded-2xl rounded-tl-none w-full max-w-[95%] shadow-sm mt-2">
+                    <!-- Route and Hotels -->
+                    <div class="markdown-body text-gray-800" v-html="renderMarkdown(msg.data.route_and_hotels)"></div>
+                    
+                    <!-- Total Price -->
+                    <div v-if="msg.data.total_price && msg.data.total_price !== '-'" class="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center">
+                        <span class="text-xl mr-2">💰</span>
+                        <div>
+                            <strong class="text-green-800 block">Примерная общая стоимость:</strong>
+                            <span class="text-green-700">{{ msg.data.total_price }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Tours Selection -->
+                    <div v-if="msg.data.tours && msg.data.tours.length > 0" class="mt-6 space-y-4">
+                        <h3 class="text-lg font-bold border-b pb-2 mb-4">Доступные туры на выбор:</h3>
+                        <div v-for="(tour, tIdx) in msg.data.tours" :key="tIdx" 
+                             @click="selectTour(tour.title)"
+                             class="p-4 border-2 border-transparent bg-gray-50 rounded-xl hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition-all">
+                            <h4 class="font-bold text-blue-700 mb-2 flex items-center">
+                                <span class="mr-2">✨</span> {{ tour.title }}
+                            </h4>
+                            <div class="markdown-body text-sm text-gray-600" v-html="renderMarkdown(tour.description)"></div>
+                            <div class="mt-3 text-right">
+                                <span class="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">Выбрать этот тур &rarr;</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Loading Indicator -->
+            <div v-if="loading && messages.length > 0" class="self-start bg-gray-100 text-gray-500 p-4 rounded-2xl rounded-tl-none flex items-center space-x-2">
+                <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+            </div>
+            
+        </main>
+
+        <!-- Chat Input Area (Sticky Bottom) -->
+        <footer v-if="messages.length > 0" class="bg-white border-t p-4 flex flex-col space-y-3 shrink-0 relative z-20">
+            <div class="flex items-center space-x-4 px-2">
+                <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" v-model="search_tickets" class="rounded text-blue-600 w-4 h-4 focus:ring-blue-500 border-gray-300">
+                    <span class="text-sm font-medium text-gray-600">Искать билеты</span>
+                </label>
+                <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" v-model="search_hotels" class="rounded text-blue-600 w-4 h-4 focus:ring-blue-500 border-gray-300">
+                    <span class="text-sm font-medium text-gray-600">Искать отели</span>
+                </label>
+            </div>
+            
+            <div class="flex space-x-2">
+                <input v-model="chatInput" @keyup.enter="sendMessage" type="text" class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" placeholder="Напишите пожелания или кликните по туру выше...">
+                <button @click="sendMessage" :disabled="loading || !chatInput.trim()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-colors disabled:bg-blue-300 disabled:cursor-not-allowed">
+                    Отправить
+                </button>
+            </div>
+        </footer>
+        
+    </div>
+
+    <script>
+        const { createApp, ref } = Vue;
+
+        createApp({
+            setup() {
+                const query = ref('');
+                const city = ref('');
+                const dates = ref('');
+                const budget = ref('');
+                const search_tickets = ref(false);
+                const search_hotels = ref(false);
+                
+                const chatInput = ref('');
+                const messages = ref([]); // {role: 'user'|'assistant', content: string, data: object}
+                const loading = ref(false);
+
+                const renderMarkdown = (text) => {
+                    if (!text) return '';
+                    return marked.parse(text);
+                };
+
+                const selectTour = (title) => {
+                    chatInput.value = `Мне понравился тур "${title}", расскажи про него подробнее`;
+                    // Optional: automatically send the message
+                    // sendMessage();
+                };
+
+                const startChat = async () => {
+                    if (!query.value.trim() || !city.value.trim() || !dates.value.trim()) {
+                        alert("Пожалуйста, заполните пожелания, город и даты.");
+                        return;
+                    }
+                    await sendRequest(query.value);
+                };
+
+                const sendMessage = async () => {
+                    if (!chatInput.value.trim() || loading.value) return;
+                    const text = chatInput.value;
+                    chatInput.value = '';
+                    await sendRequest(text);
+                };
+
+                const sendRequest = async (userText) => {
+                    messages.value.push({ role: 'user', content: userText });
+                    loading.value = true;
+
+                    // Convert current messages to the history format backend expects
+                    const history = messages.value.map(m => ({
+                        role: m.role,
+                        content: m.role === 'assistant' ? JSON.stringify(m.data) : m.content
+                    })).slice(0, -1); // exclude the message we just pushed
+
+                    try {
+                        const response = await fetch('/api/chat', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                query: userText,
+                                city: city.value,
+                                dates: dates.value,
+                                budget: budget.value,
+                                search_tickets: search_tickets.value,
+                                search_hotels: search_hotels.value,
+                                history: history
+                            })
+                        });
+
+                        const data = await response.json();
+                        messages.value.push({
+                            role: 'assistant',
+                            content: 'Structured Response',
+                            data: data
+                        });
+
+                        // Scroll to bottom
+                        setTimeout(() => {
+                            const mainEl = document.querySelector('main');
+                            if (mainEl) mainEl.scrollTop = mainEl.scrollHeight;
+                        }, 100);
+                        
+                    } catch (error) {
+                        console.error(error);
+                        messages.value.push({
+                            role: 'assistant',
+                            content: 'Error',
+                            data: {
+                                route_and_hotels: "Произошла ошибка при обращении к серверу.",
+                                tours: [],
+                                total_price: "-"
+                            }
+                        });
+                    } finally {
+                        loading.value = false;
+                    }
+                };
+
+                return {
+                    query, city, dates, budget,
+                    search_tickets, search_hotels,
+                    chatInput, messages, loading,
+                    startChat, sendMessage, selectTour, renderMarkdown
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
