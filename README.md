@@ -56,6 +56,7 @@ repo/
    AVIASALES_API_KEY=ваш_ключ_от_travelpayouts
    YANDEX_API_KEY=ваш_ключ_от_яндекс_расписаний
    OPENROUTER_API_KEY=ваш_ключ_от_openrouter
+   RAPIDAPI_KEY=ваш_ключ_от_rapidapi_booking_com
    ```
 
 5. **Запустите сервер**:
