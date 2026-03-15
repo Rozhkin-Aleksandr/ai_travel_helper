@@ -25,7 +25,7 @@ except Exception as e:
 
 YANDEX_API_KEY = os.getenv('YANDEX_API_KEY')
 AVIASALES_API_KEY = os.getenv('AVIASALES_API_KEY')
-BOOKING_API_KEY = "3717f1718bmsh569d8a5d5e58aa1p1bf539jsn904e52774b4f"
+BOOKING_API_KEY = os.getenv('RAPIDAPI_KEY')
 
 CAR_TYPES_RU = {
     'plazcard': 'Плацкарт',
