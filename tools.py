@@ -129,37 +129,53 @@ def search_train_tickets_ru(city_from, city_to, date):
 
 
 def get_iata(city_name):
-    url = "https://engine.hotellook.com/api/v2/lookup.json"
-    querystring = {"query": city_name, "lang": "ru", "lookFor": "city", "limit": "1", "token": AVIASALES_API_KEY}
-    try:
-        resp = requests.get(url, params=querystring, headers={'x-access-token': AVIASALES_API_KEY}).json()
-        if resp and resp.get('results') and resp['results'].get('locations'):
-            return resp['results']['locations'][0]['iata']
-    except Exception as e:
-        pass
+    # Устарело, IATA коды теперь отдает сама нейросеть
     return None
 
-def search_flight_tickets(city_from, city_to, date):
-    print(f"Searching flights: {city_from} -> {city_to} on {date}")
-    origin = get_iata(city_from)
-    destination = get_iata(city_to)
+def search_flight_tickets(origin_iata, destination_iata, depart_date, return_date=None):
+    print(f"Searching flights: {origin_iata} -> {destination_iata} on {depart_date} (Return: {return_date})")
     
-    if not origin or not destination:
-        return json.dumps({"error": "IATA code not found for one of the cities."})
+    if not origin_iata or not destination_iata:
+        err_msg = "IATA code is missing"
+        print(f"[DEBUG] {err_msg}")
+        return json.dumps({"error": err_msg})
         
-    url = "https://api.travelpayouts.com/v1/prices/cheap"
-    querystring = {"origin": origin, "destination": destination, "depart_date": date}
+    url = "https://api.travelpayouts.com/v2/prices/latest"
+    
+    # API v2 filters
+    # beginning_of_period needs to be the first day of the month (e.g. 2026-05-01 instead of 2026-05-10)
+    month_start = f"{depart_date[:7]}-01"
+    
+    querystring = {
+        "currency": "rub",
+        "origin": origin_iata.upper(),
+        "destination": destination_iata.upper(),
+        "beginning_of_period": month_start,
+        "period_type": "month",
+        "limit": "30",
+        "sorting": "price",
+        "trip_class": "0"
+    }
+    
+    # If a return date is provided, we search for roundtrip
+    if return_date:
+        querystring["one_way"] = "false"
+    else:
+        querystring["one_way"] = "true"
+        
     headers = {'x-access-token': AVIASALES_API_KEY}
     
     try:
         response = requests.get(url, headers=headers, params=querystring)
+        print(f"[DEBUG] Flights API status: {response.status_code}")
         data = response.json()
-        if data.get("success") and data.get("data") and destination in data["data"]:
-            flights = data["data"][destination]
-            # flights is usually a dict keyed by some id, let's just return the values
-            return json.dumps({"flights": list(flights.values())[:5]})
+        print(f"[DEBUG] Flights response body: {json.dumps(data, ensure_ascii=False)[:300]}...")
+        if data.get("success") and data.get("data"):
+            # Return top 5 results as requested
+            return json.dumps({"flights": data["data"][:5]})
         return json.dumps({"info": "No flights found", "raw": data})
     except Exception as e:
+        print(f"[DEBUG] search_flight_tickets error: {e}")
         return json.dumps({"error": str(e)})
 
 
@@ -206,3 +222,33 @@ def search_hotels_abroad(city, date_in, date_out):
         
     except Exception as e:
         return json.dumps({"error": str(e)})
+
+import urllib.parse
+
+def translit_city(city):
+    mapping = {
+        'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e', 'ж': 'zh',
+        'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o',
+        'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts',
+        'ч': 'ch', 'ш': 'sh', 'щ': 'shch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu',
+        'я': 'ya', ' ': '-', '-': '-'
+    }
+    return ''.join(mapping.get(c, c) for c in city.lower())
+
+def get_ru_hotel_links(city, date_in, date_out):
+    print(f"Generating RU hotel links for: {city} {date_in} - {date_out}")
+    city_translit = translit_city(city)
+    city_url = urllib.parse.quote(city)
+    
+    avito_link = f"https://www.avito.ru/{city_translit}/kvartiry/sdam/posutochno/"
+    sutochno_link = f"https://sutochno.ru/front/searchapp/search?occupied={date_in};{date_out}&guests_adults=2&term={city_url}"
+    yandex_link = f"https://travel.yandex.ru/hotels/{city_translit}/?adults=2&checkinDate={date_in}&checkoutDate={date_out}"
+    
+    return json.dumps({
+        "info": "Успешно сгенерированы ссылки. Пожалуйста, передайте их пользователю в ответе.",
+        "links": {
+            "avito": avito_link,
+            "sutochno": sutochno_link,
+            "yandex_travel": yandex_link
+        }
+    })

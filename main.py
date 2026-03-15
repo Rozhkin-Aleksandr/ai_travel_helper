@@ -7,9 +7,9 @@ import json
 import openai
 from dotenv import load_dotenv
 
-from tools import search_train_tickets_ru, search_flight_tickets, search_hotels_abroad
+from tools import search_train_tickets_ru, search_flight_tickets, search_hotels_abroad, get_ru_hotel_links
 
-load_dotenv(dotenv_path="../.env")
+load_dotenv(dotenv_path=".env")
 
 app = FastAPI()
 
@@ -59,15 +59,16 @@ tools_schema = [
         "type": "function",
         "function": {
             "name": "search_flight_tickets",
-            "description": "Поиск авиабилетов. Используется для поездок за границу или по России, когда на поезде долго.",
+            "description": "Поиск авиабилетов. Используется для поездок за границу или по России, когда на поезде долго. ВНИМАНИЕ: Возвращаемая цена — это цена за билеты ТУДА И ОБРАТНО.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "city_from": {"type": "string"},
-                    "city_to": {"type": "string"},
-                    "date": {"type": "string", "description": "Дата в формате YYYY-MM-DD"}
+                    "origin_iata": {"type": "string", "description": "IATA код города/аэропорта отправления (обязательно 3 латинские буквы, например MOW для Москвы)"},
+                    "destination_iata": {"type": "string", "description": "IATA код города/аэропорта назначения (обязательно 3 латинские буквы, например HKT для Пхукета, IST для Стамбула)"},
+                    "depart_date": {"type": "string", "description": "Дата отправления в формате YYYY-MM-DD"},
+                    "return_date": {"type": "string", "description": "Опционально. Дата обратного вылета в формате YYYY-MM-DD. Если не указано, ищет билет в одну сторону."}
                 },
-                "required": ["city_from", "city_to", "date"]
+                "required": ["origin_iata", "destination_iata", "depart_date"]
             }
         }
     },
@@ -86,6 +87,22 @@ tools_schema = [
                 "required": ["city", "date_in", "date_out"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_ru_hotel_links",
+            "description": "Генерация прямых ссылок на поиск отелей по России (Суточно.ру, Авито, Яндекс Путешествия). Использовать ТОЛЬКО для городов РФ.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "Название города на русском языке, например Выборг или Санкт-Петербург"},
+                    "date_in": {"type": "string", "description": "Дата заезда в формате YYYY-MM-DD"},
+                    "date_out": {"type": "string", "description": "Дата выезда в формате YYYY-MM-DD"}
+                },
+                "required": ["city", "date_in", "date_out"]
+            }
+        }
     }
 ]
 
@@ -94,7 +111,7 @@ SYSTEM_PROMPT = """
 Отвечай структурировано в формате JSON.
 Твой ответ должен строго соответствовать следующей структуре JSON:
 {
-  "route_and_hotels": "Строка в формате Markdown. Здесь опиши маршрут, как лучше добраться (поезд или самолет), примерное время и цену билетов. Если пользователь поставил галочки для поиска и ты вызвал функции, используй их результаты! Если город в РФ (Россия) - отели не ищи функциями, а просто посоветуй ссылки на sutochno.ru, avito, Яндекс Путешествия. Если вне РФ - ищи отели функцией.",
+  "route_and_hotels": "Строка в формате Markdown. Здесь опиши маршрут, как лучше добраться (поезд или самолет). Если были найдены авиабилеты - обязательно выведи ВСЕ найденные варианты (до 5 штук) списком и добавь небольшой анализ: какой вариант лучше подходит под предпочтения и бюджет пользователя. ВАЖНО: цены на авиабилеты уже указаны за билеты ТУДА И ОБРАТНО. Если город в РФ - вызови функцию get_ru_hotel_links и посоветуй полученные ссылки. Если вне РФ - ищи отели функцией search_hotels_abroad. НИКОГДА не упоминай пользователю технические детали работы, названия функций (get_ru_hotel_links, search_hotels_abroad и т.д.) или фразы в духе 'поиск через функции был запрещен'. Общайся максимально естественно, как живой заботливый турагент.",
   "tours": [
     {
       "title": "Название тура",
@@ -111,6 +128,10 @@ SYSTEM_PROMPT = """
 async def chat_endpoint(req: ChatRequest):
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     
+    # Add history
+    for h in req.history:
+        messages.append({"role": h.role, "content": h.content})
+        
     # Context message
     context = f"Текущий запрос пользователя: {req.query}\n"
     context += f"Бюджет: {req.budget}\n"
@@ -120,10 +141,6 @@ async def chat_endpoint(req: ChatRequest):
     context += f"Искать отели (разрешено функциями): {'Да' if req.search_hotels else 'Нет'}\n"
     
     messages.append({"role": "user", "content": context})
-    
-    # Add history
-    for h in req.history:
-        messages.append({"role": h.role, "content": h.content})
 
     tools = tools_schema if (req.search_tickets or req.search_hotels) else None
 
@@ -152,9 +169,11 @@ async def chat_endpoint(req: ChatRequest):
                 if func_name == "search_train_tickets_ru" and req.search_tickets:
                     res_str = search_train_tickets_ru(args.get("city_from"), args.get("city_to"), args.get("date"))
                 elif func_name == "search_flight_tickets" and req.search_tickets:
-                    res_str = search_flight_tickets(args.get("city_from"), args.get("city_to"), args.get("date"))
+                    res_str = search_flight_tickets(args.get("origin_iata"), args.get("destination_iata"), args.get("depart_date"), args.get("return_date"))
                 elif func_name == "search_hotels_abroad" and req.search_hotels:
                     res_str = search_hotels_abroad(args.get("city"), args.get("date_in"), args.get("date_out"))
+                elif func_name == "get_ru_hotel_links" and req.search_hotels:
+                    res_str = get_ru_hotel_links(args.get("city"), args.get("date_in"), args.get("date_out"))
                 else:
                     res_str = json.dumps({"error": "Tool not allowed or unrecognized."})
                 
