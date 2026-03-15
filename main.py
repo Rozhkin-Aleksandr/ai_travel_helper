@@ -128,7 +128,7 @@ async def chat_endpoint(req: ChatRequest):
     tools = tools_schema if (req.search_tickets or req.search_hotels) else None
 
     # Call OpenRouter
-    model = "google/gemini-2.5-pro" # reliable with tools and JSON
+    model = "google/gemini-2.5-flash-lite-preview-09-2025" # reliable with tools and JSON
     try:
         response = client.chat.completions.create(
             model=model,

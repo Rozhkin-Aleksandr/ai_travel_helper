@@ -5,7 +5,23 @@ import re
 import requests
 from dotenv import load_dotenv
 
-load_dotenv(dotenv_path="../.env")  # Load from parent dir since we are in repo/
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(dotenv_path=os.path.join(BASE_DIR, ".env"))
+
+# Load city maps
+try:
+    with open(os.path.join(BASE_DIR, "yandex_cities.json"), "r", encoding="utf-8") as f:
+        YANDEX_CITIES = json.load(f)
+except Exception as e:
+    print("Warning: failed to load yandex_cities.json", e)
+    YANDEX_CITIES = {}
+
+try:
+    with open(os.path.join(BASE_DIR, "tutu_cities.json"), "r", encoding="utf-8") as f:
+        TUTU_CITIES = json.load(f)
+except Exception as e:
+    print("Warning: failed to load tutu_cities.json", e)
+    TUTU_CITIES = {}
 
 YANDEX_API_KEY = os.getenv('YANDEX_API_KEY')
 AVIASALES_API_KEY = os.getenv('AVIASALES_API_KEY')
@@ -45,39 +61,12 @@ def get_tutu_prices_map(origin_id, destination_id):
     return price_map
 
 def find_tutu_city_id(city_name):
-    # This is quite slow to read 50k lines every time, but ok for a hackathon
-    try:
-        with open("../tutu_routes.csv", "r", encoding="utf-8") as f:
-            reader = csv.reader(f, delimiter=";")
-            for row in reader:
-                if len(row) >= 4:
-                    if city_name.lower() in row[1].lower():
-                        return row[0]
-                    if city_name.lower() in row[3].lower():
-                        return row[2]
-    except Exception as e:
-        print(f"Error reading tutu_routes.csv: {e}")
-    return None
+    city_lower = city_name.lower()
+    return TUTU_CITIES.get(city_lower)
 
 def find_yandex_city_id(city_name):
-    # fallback to a known dictionary if not provided
-    # we don't have yandex csv yet as per prompt: "для яндекска файл будет чуть позже"
-    # the prompt says "чтоб получить код города для яндекса и туту надо будет использовать специальные csv файлы ... для яндекска файл будет чуть позже"
-    # For now we can use a hardcoded map or try to get it from yandex suggest API
-    # Yandex suggest API: https://suggests.rasp.yandex.net/all_suggests?format=old&part=Москва
-    try:
-        url = "https://suggests.rasp.yandex.net/all_suggests"
-        params = {"format": "old", "part": city_name}
-        resp = requests.get(url, params=params).json()
-        # [ "Москва", [ ["c213", "Москва", "город", ... ] ] ]
-        if len(resp) >= 2 and len(resp[1]) > 0:
-            return resp[1][0][0] # typically starts with 'c' for city like 'c213'
-    except Exception as e:
-        pass
-    if city_name.lower() == "москва": return "c213"
-    if city_name.lower() == "санкт-петербург": return "c2"
-    if city_name.lower() == "сочи": return "c239"
-    return "c213" # fallback to moscow
+    city_lower = city_name.lower()
+    return YANDEX_CITIES.get(city_lower)
 
 def search_train_tickets_ru(city_from, city_to, date):
     print(f"Searching trains: {city_from} -> {city_to} on {date}")
