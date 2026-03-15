@@ -11,7 +11,8 @@ from dotenv import load_dotenv
 
 from tools import search_train_tickets_ru, search_flight_tickets, search_hotels_abroad, get_ru_hotel_links
 
-load_dotenv(dotenv_path=".env")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(dotenv_path=os.path.join(BASE_DIR, ".env"))
 
 CHATS_DIR = os.path.join(os.path.dirname(__file__), "chats")
 os.makedirs(CHATS_DIR, exist_ok=True)
@@ -272,9 +273,31 @@ async def chat_endpoint(req: ChatRequest):
             )
             message = second_response.choices[0].message
 
+        # OpenRouter returns markdown blocks like ```json ... ``` sometimes, 
+        # so we need to clean the string before parsing it.
         content = message.content
+        if content.startswith("```json"):
+            content = content[7:]
+        if content.endswith("```"):
+            content = content[:-3]
+        
+        # Some models use ``` instead of ```json
+        if content.startswith("```"):
+            content = content[3:]
+            
+        content = content.strip()
+            
         return json.loads(content)
 
+    except json.JSONDecodeError as e:
+        print(f"JSON Decode Error: {e}")
+        print(f"Failed content was: {content}")
+        # Return what we can or a formatted error instead of crashing the API
+        return {
+            "route_and_hotels": f"Произошла ошибка при форматировании ответа от нейросети. Попробуйте еще раз или переформулируйте запрос.",
+            "tours": [],
+            "total_price": "-"
+        }
     except Exception as e:
         print(f"Error: {e}")
         return {

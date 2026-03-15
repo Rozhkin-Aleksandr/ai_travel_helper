@@ -5,7 +5,7 @@ import re
 import requests
 from dotenv import load_dotenv
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(dotenv_path=os.path.join(BASE_DIR, ".env"))
 
 # Load city maps
@@ -52,6 +52,9 @@ def get_tutu_prices_map(origin_id, destination_id):
         raw_text = response.text
         start_idx = raw_text.find('(') + 1
         end_idx = raw_text.rfind(')')
+        if start_idx <= 0 or end_idx == -1:
+            print(f"Error fetching tutu prices: {raw_text[:100]}")
+            return price_map
         data = json.loads(raw_text[start_idx:end_idx])
         for trip in data.get('trips', []):
             norm_num = normalize_train_number(trip.get('trainNumber', ''))
@@ -81,9 +84,10 @@ def search_train_tickets_ru(city_from, city_to, date):
 
     tutu_prices = get_tutu_prices_map(tutu_from, tutu_to)
     
+    yandex_api_key = os.getenv('YANDEX_API_KEY')
     url = "https://api.rasp.yandex.net/v3.0/search/"
     params = {
-        'apikey': YANDEX_API_KEY,
+        'apikey': yandex_api_key,
         'from': yandex_from,
         'to': yandex_to,
         'date': date,
@@ -163,11 +167,14 @@ def search_flight_tickets(origin_iata, destination_iata, depart_date, return_dat
     else:
         querystring["one_way"] = "true"
         
-    headers = {'x-access-token': AVIASALES_API_KEY}
+    api_key = os.getenv('AVIASALES_API_KEY')
+    headers = {'x-access-token': api_key}
     
     try:
         response = requests.get(url, headers=headers, params=querystring)
         print(f"[DEBUG] Flights API status: {response.status_code}")
+        if response.status_code != 200:
+            print(f"[DEBUG] API Error response: {response.text}")
         data = response.json()
         print(f"[DEBUG] Flights response body: {json.dumps(data, ensure_ascii=False)[:300]}...")
         if data.get("success") and data.get("data"):
