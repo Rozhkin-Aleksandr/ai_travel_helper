@@ -4,12 +4,17 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import os
 import json
+import uuid
+from datetime import datetime
 import openai
 from dotenv import load_dotenv
 
 from tools import search_train_tickets_ru, search_flight_tickets, search_hotels_abroad
 
 load_dotenv(dotenv_path="../.env")
+
+CHATS_DIR = os.path.join(os.path.dirname(__file__), "chats")
+os.makedirs(CHATS_DIR, exist_ok=True)
 
 app = FastAPI()
 
@@ -36,6 +41,82 @@ class ChatRequest(BaseModel):
     search_tickets: bool
     search_hotels: bool
     history: list[ChatMessage]
+
+class SaveChatRequest(BaseModel):
+    id: str | None = None
+    title: str
+    city: str
+    dates: str
+    messages: list[dict]
+
+
+@app.get("/api/chats")
+async def list_chats():
+    chats = []
+    for filename in os.listdir(CHATS_DIR):
+        if not filename.endswith(".json"):
+            continue
+        filepath = os.path.join(CHATS_DIR, filename)
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            chats.append({
+                "id": data.get("id"),
+                "title": data.get("title", "Без названия"),
+                "city": data.get("city", ""),
+                "dates": data.get("dates", ""),
+                "created_at": data.get("created_at", ""),
+            })
+        except Exception:
+            continue
+    chats.sort(key=lambda c: c.get("created_at", ""), reverse=True)
+    return chats
+
+
+@app.post("/api/chats")
+async def save_chat(req: SaveChatRequest):
+    chat_id = req.id or str(uuid.uuid4())
+    filepath = os.path.join(CHATS_DIR, f"{chat_id}.json")
+
+    created_at = datetime.now().isoformat()
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                old = json.load(f)
+            created_at = old.get("created_at", created_at)
+        except Exception:
+            pass
+
+    chat_data = {
+        "id": chat_id,
+        "title": req.title,
+        "city": req.city,
+        "dates": req.dates,
+        "messages": req.messages,
+        "created_at": created_at,
+        "updated_at": datetime.now().isoformat(),
+    }
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(chat_data, f, ensure_ascii=False, indent=2)
+    return {"id": chat_id}
+
+
+@app.get("/api/chats/{chat_id}")
+async def get_chat(chat_id: str):
+    filepath = os.path.join(CHATS_DIR, f"{chat_id}.json")
+    if not os.path.exists(filepath):
+        return {"error": "Chat not found"}
+    with open(filepath, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+@app.delete("/api/chats/{chat_id}")
+async def delete_chat(chat_id: str):
+    filepath = os.path.join(CHATS_DIR, f"{chat_id}.json")
+    if os.path.exists(filepath):
+        os.remove(filepath)
+    return {"ok": True}
+
 
 # Define tools
 tools_schema = [

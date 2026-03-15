@@ -4,160 +4,335 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Travel Agent</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                }
+            }
+        }
+    </script>
     <style>
-        .markdown-body h1, .markdown-body h2, .markdown-body h3 { font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
-        .markdown-body h1 { font-size: 1.5em; }
-        .markdown-body h2 { font-size: 1.25em; }
-        .markdown-body p { margin-bottom: 0.5em; }
-        .markdown-body ul { list-style-type: disc; margin-left: 1.5em; margin-bottom: 1em; }
-        .markdown-body li { margin-bottom: 0.25em; }
-        .markdown-body a { color: #2563eb; text-decoration: underline; }
-        .markdown-body strong { font-weight: bold; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #e0f2fe;
+        }
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+            filter: invert(0.5);
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.55);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .glass-strong {
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+        .glass-header {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-900 font-sans h-screen flex flex-col">
-    <div id="app" class="flex flex-col h-full max-w-4xl mx-auto w-full bg-white shadow-xl overflow-hidden">
+<body class="text-slate-900 h-screen overflow-hidden selection:bg-sky-200 selection:text-sky-900">
+    
+    <div id="app" class="flex h-full w-full">
         
-        <!-- Header -->
-        <header class="bg-blue-600 text-white p-4 text-center text-xl font-bold shadow-md z-10">
-            AI Travel Agent 🌍✈️
-        </header>
-
-        <!-- Main Content Area -->
-        <main class="flex-1 overflow-y-auto p-6 flex flex-col space-y-6 relative">
+        <aside class="hidden md:flex flex-col w-72 bg-slate-900 text-slate-300 shadow-2xl z-30">
+            <div class="p-4 border-b border-slate-800">
+                <button @click="startNewChat" class="w-full flex items-center justify-center space-x-2 bg-sky-500 hover:bg-sky-400 text-white px-4 py-3 rounded-xl transition-all font-semibold shadow-md shadow-sky-500/20">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    <span>Новое путешествие</span>
+                </button>
+            </div>
             
-            <!-- Welcome Screen (Centered Inputs) -->
-            <div v-if="messages.length === 0" class="flex flex-col items-center justify-center h-full space-y-6 px-4">
-                <h2 class="text-2xl font-bold text-gray-700 text-center mb-4">Спланируйте идеальное путешествие</h2>
+            <div class="flex-1 overflow-y-auto px-3 py-4 space-y-1 relative">
+                <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 px-2">Ваши маршруты</div>
                 
-                <div class="w-full max-w-lg space-y-4 bg-gray-50 p-6 rounded-xl border border-gray-200">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Какой тур вы хотите? (веселый, музейный, архитектурный...)</label>
-                        <input v-model="query" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Например: хочу музейный тур с вкусной едой">
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Город назначения</label>
-                            <input v-model="city" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Например: Санкт-Петербург">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Даты (с - по)</label>
-                            <input v-model="dates" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Например: 2026-05-10 - 2026-05-15">
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Бюджет</label>
-                        <input v-model="budget" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Например: 50 000 руб">
-                    </div>
+                <div v-if="chatHistory.length === 0" class="px-3 py-4 text-xs text-slate-500 italic leading-relaxed">
+                    Здесь будут сохраняться ваши прошлые запросы
+                </div>
 
-                    <div class="flex items-center space-x-4 pt-2">
-                        <label class="flex items-center space-x-2 cursor-pointer">
-                            <input type="checkbox" v-model="search_tickets" class="rounded text-blue-600 w-5 h-5">
-                            <span class="text-sm font-medium text-gray-700">Найти билеты</span>
-                        </label>
-                        <label class="flex items-center space-x-2 cursor-pointer">
-                            <input type="checkbox" v-model="search_hotels" class="rounded text-blue-600 w-5 h-5">
-                            <span class="text-sm font-medium text-gray-700">Найти отели</span>
-                        </label>
-                    </div>
-
-                    <button @click="startChat" :disabled="loading" class="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:bg-blue-400">
-                        {{ loading ? 'Думаю...' : 'Подобрать тур' }}
+                <div v-for="chat in chatHistory" :key="chat.id" 
+                     @click="loadChat(chat.id)"
+                     :class="['w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm flex items-center space-x-3 group cursor-pointer', currentChatId === chat.id ? 'bg-slate-800 text-white' : '']">
+                    <span class="text-xl opacity-70 group-hover:opacity-100 transition-opacity">✈️</span>
+                    <span class="truncate flex-1">{{ chat.title }}</span>
+                    <button @click.stop="deleteChat(chat.id)" class="opacity-0 group-hover:opacity-100 transition-opacity text-slate-500 hover:text-red-400 flex-shrink-0" title="Удалить">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     </button>
                 </div>
             </div>
-
-            <!-- Chat Messages -->
-            <div v-for="(msg, index) in messages" :key="index" class="flex flex-col mb-4">
-                <!-- User Message -->
-                <div v-if="msg.role === 'user'" class="self-end bg-blue-100 text-blue-900 p-4 rounded-2xl rounded-tr-none max-w-[80%] shadow-sm">
-                    <p class="whitespace-pre-wrap">{{ msg.content }}</p>
+            
+            <div class="p-4 border-t border-slate-800">
+                <div class="flex items-center space-x-3 text-sm px-2">
+                    <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-white text-[10px]">USER</div>
+                    <span class="font-medium text-slate-200">Путешественник</span>
                 </div>
-                
-                <!-- Assistant Message (Document Style) -->
-                <div v-else class="self-start bg-white border border-gray-200 p-6 rounded-2xl rounded-tl-none w-full max-w-[95%] shadow-sm mt-2">
-                    <!-- Route and Hotels -->
-                    <div class="markdown-body text-gray-800" v-html="renderMarkdown(msg.data.route_and_hotels)"></div>
-                    
-                    <!-- Total Price -->
-                    <div v-if="msg.data.total_price && msg.data.total_price !== '-'" class="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center">
-                        <span class="text-xl mr-2">💰</span>
-                        <div>
-                            <strong class="text-green-800 block">Примерная общая стоимость:</strong>
-                            <span class="text-green-700">{{ msg.data.total_price }}</span>
-                        </div>
-                    </div>
+            </div>
+        </aside>
 
-                    <!-- Tours Selection -->
-                    <div v-if="msg.data.tours && msg.data.tours.length > 0" class="mt-6 space-y-4">
-                        <h3 class="text-lg font-bold border-b pb-2 mb-4">Доступные туры на выбор:</h3>
-                        <div v-for="(tour, tIdx) in msg.data.tours" :key="tIdx" 
-                             @click="selectTour(tour.title)"
-                             class="p-4 border-2 border-transparent bg-gray-50 rounded-xl hover:border-blue-400 hover:bg-blue-50 cursor-pointer transition-all">
-                            <h4 class="font-bold text-blue-700 mb-2 flex items-center">
-                                <span class="mr-2">✨</span> {{ tour.title }}
-                            </h4>
-                            <div class="markdown-body text-sm text-gray-600" v-html="renderMarkdown(tour.description)"></div>
-                            <div class="mt-3 text-right">
-                                <span class="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">Выбрать этот тур &rarr;</span>
+        <div class="flex-1 flex flex-col h-full relative">
+            
+            <header class="glass-header px-6 py-4 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+                <div class="flex items-center space-x-3">
+                    <span class="text-2xl drop-shadow-sm">🌍</span>
+                    <h1 class="text-lg font-bold text-slate-800 tracking-tight">AI Travel Agent</h1>
+                </div>
+                <div class="text-xs font-semibold bg-sky-100 text-sky-700 px-3 py-1 rounded-full border border-sky-200">
+                    Beta
+                </div>
+            </header>
+
+            <main class="flex-1 overflow-y-auto p-4 sm:p-8 flex flex-col space-y-8 scroll-smooth pb-32">
+                
+                <div v-if="messages.length === 0" class="flex flex-col items-center justify-center h-full min-h-[60vh] animate-fade-in px-4">
+                    <div class="text-center mb-8">
+                        <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-800 mb-3 tracking-tight">Куда отправимся? ✈️</h2>
+                        <p class="text-slate-500 text-lg font-medium">Спланируйте маршрут мечты за пару секунд</p>
+                    </div>
+                    
+                    <div class="w-full max-w-2xl glass-strong p-6 sm:p-8 rounded-[2rem] shadow-2xl shadow-sky-900/10 space-y-5 relative">
+                        
+                        <div class="relative">
+                            <label class="block text-sm font-bold text-slate-700 mb-1.5 ml-1 text-[13px]">ВАШИ ПОЖЕЛАНИЯ</label>
+                            <input v-model="query" type="text" class="w-full p-4 bg-white/60 border border-white/40 rounded-2xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-all outline-none shadow-sm" placeholder="Например: хочу музейный тур с вкусной едой">
+                        </div>
+                        
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 relative">
+                            <div class="sm:col-span-1">
+                                <label class="block text-sm font-bold text-slate-700 mb-1.5 ml-1 text-[13px]">ГОРОД</label>
+                                <input v-model="city" type="text" class="w-full p-4 bg-white/60 border border-white/40 rounded-2xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-all outline-none shadow-sm" placeholder="Санкт-Петербург">
+                            </div>
+                            <div class="sm:col-span-1">
+                                <label class="block text-sm font-bold text-slate-700 mb-1.5 ml-1 text-[13px]">ДАТА ОТПРАВЛЕНИЯ</label>
+                                <input v-model="dateFrom" type="date" min="2024-01-01" max="9999-12-31" class="w-full p-4 bg-white/60 border border-white/40 rounded-2xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-all outline-none shadow-sm text-slate-600">
+                            </div>
+                            <div class="sm:col-span-1">
+                                <label class="block text-sm font-bold text-slate-700 mb-1.5 ml-1 text-[13px]">ДАТА УБЫТИЯ</label>
+                                <input v-model="dateTo" type="date" min="2024-01-01" max="9999-12-31" class="w-full p-4 bg-white/60 border border-white/40 rounded-2xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-all outline-none shadow-sm text-slate-600">
+                            </div>
+                        </div>
+                        
+                        <div class="relative">
+                            <label class="block text-sm font-bold text-slate-700 mb-1.5 ml-1 text-[13px]">БЮДЖЕТ</label>
+                            <input v-model="budget" type="text" class="w-full p-4 bg-white/60 border border-white/40 rounded-2xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-all outline-none shadow-sm" placeholder="Например: 50 000 руб">
+                        </div>
+
+                        <div class="flex items-center space-x-6 pt-2 pb-2 justify-center sm:justify-start">
+                            <label class="flex items-center space-x-3 cursor-pointer group">
+                                <input type="checkbox" v-model="search_tickets" class="rounded-lg text-sky-500 w-5 h-5 focus:ring-sky-500 border-slate-300 transition-all cursor-pointer">
+                                <span class="text-sm font-semibold text-slate-600 group-hover:text-slate-900 transition-colors">Поиск билетов 🎫</span>
+                            </label>
+                            <label class="flex items-center space-x-3 cursor-pointer group">
+                                <input type="checkbox" v-model="search_hotels" class="rounded-lg text-sky-500 w-5 h-5 focus:ring-sky-500 border-slate-300 transition-all cursor-pointer">
+                                <span class="text-sm font-semibold text-slate-600 group-hover:text-slate-900 transition-colors">Поиск отелей 🏨</span>
+                            </label>
+                        </div>
+
+                        <button @click="startChat" :disabled="loading" class="w-full flex justify-center items-center py-4 px-6 rounded-2xl text-base font-bold text-white bg-slate-900 hover:bg-slate-800 transition-all disabled:bg-slate-400 shadow-xl shadow-slate-900/20">
+                            <svg v-if="loading" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            {{ loading ? 'Прокладываем маршрут...' : 'Подобрать идеальный тур' }}
+                        </button>
+                    </div>
+                </div>
+
+                <div v-for="(msg, index) in messages" :key="index" class="flex flex-col w-full max-w-4xl mx-auto animate-fade-in">
+                    
+                    <div v-if="msg.role === 'user'" class="self-end px-6 py-4 rounded-3xl rounded-tr-sm max-w-[85%] sm:max-w-[75%] shadow-sm text-sky-900" style="background:rgba(186,230,253,0.5);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.4)">
+                        <p class="whitespace-pre-wrap leading-relaxed">{{ msg.content }}</p>
+                    </div>
+                    
+                    <div v-else class="self-start w-full mt-4 flex space-x-4">
+                        <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-sm text-lg" style="background:rgba(255,255,255,0.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.4)">🧭</div>
+                        
+                        <div class="flex-1 space-y-6">
+                            <div class="prose prose-slate prose-a:text-sky-600 prose-headings:font-bold prose-headings:text-slate-800 max-w-none glass-strong p-6 sm:p-8 rounded-[2rem] rounded-tl-sm shadow-sm" v-html="renderMarkdown(msg.data.route_and_hotels)"></div>
+                            
+                            <div v-if="msg.data.total_price && msg.data.total_price !== '-'" class="inline-flex items-center space-x-4 px-6 py-4 rounded-2xl text-emerald-800 shadow-sm" style="background:rgba(209,250,229,0.5);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.35)">
+                                <span class="text-3xl">💰</span>
+                                <div>
+                                    <div class="text-[10px] font-black uppercase tracking-[0.1em] text-emerald-600">ИТОГО (ПРИМЕРНО)</div>
+                                    <strong class="font-bold text-xl">{{ msg.data.total_price }}</strong>
+                                </div>
+                            </div>
+
+                            <div v-if="msg.data.tours && msg.data.tours.length > 0" class="mt-4">
+                                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 ml-1 flex items-center"><span class="mr-2">🗺️</span> ДОСТУПНЫЕ ТУРЫ</h3>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <div v-for="(tour, tIdx) in msg.data.tours" :key="tIdx" 
+                                         @click="selectTour(tour.title)"
+                                         class="group flex flex-col justify-between p-6 glass rounded-3xl hover:shadow-xl cursor-pointer transition-all duration-300 hover:-translate-y-1" style="border:1px solid rgba(255,255,255,0.35)">
+                                        <div>
+                                            <h4 class="font-bold text-slate-800 mb-2 group-hover:text-sky-600 transition-colors leading-tight">{{ tour.title }}</h4>
+                                            <div class="prose prose-sm prose-slate line-clamp-4 text-slate-500" v-html="renderMarkdown(tour.description)"></div>
+                                        </div>
+                                        <div class="mt-4 pt-4 border-t border-slate-50 flex items-center text-xs font-black text-sky-600 uppercase tracking-wider">
+                                            Выбрать &rarr;
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-            
-            <!-- Loading Indicator -->
-            <div v-if="loading && messages.length > 0" class="self-start bg-gray-100 text-gray-500 p-4 rounded-2xl rounded-tl-none flex items-center space-x-2">
-                <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-                <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
-            </div>
-            
-        </main>
+                
+                <div v-if="loading && messages.length > 0" class="self-start flex space-x-4 max-w-4xl w-full mx-auto mt-4">
+                    <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center shadow-sm" style="background:rgba(255,255,255,0.6);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,0.4)">
+                        <div class="w-5 h-5 text-sky-400 animate-spin">
+                            <svg fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        </div>
+                    </div>
+                    <div class="glass px-6 py-4 rounded-2xl shadow-sm flex items-center space-x-3">
+                        <span class="text-sm font-bold text-slate-500 uppercase tracking-widest text-[11px]">Ищем билеты и отели</span>
+                        <div class="flex space-x-1">
+                            <div class="w-1.5 h-1.5 bg-sky-400 rounded-full animate-bounce"></div>
+                            <div class="w-1.5 h-1.5 bg-sky-400 rounded-full animate-bounce [animation-delay:0.2s]"></div>
+                            <div class="w-1.5 h-1.5 bg-sky-400 rounded-full animate-bounce [animation-delay:0.4s]"></div>
+                        </div>
+                    </div>
+                </div>
+                
+            </main>
 
-        <!-- Chat Input Area (Sticky Bottom) -->
-        <footer v-if="messages.length > 0" class="bg-white border-t p-4 flex flex-col space-y-3 shrink-0 relative z-20">
-            <div class="flex items-center space-x-4 px-2">
-                <label class="flex items-center space-x-2 cursor-pointer">
-                    <input type="checkbox" v-model="search_tickets" class="rounded text-blue-600 w-4 h-4 focus:ring-blue-500 border-gray-300">
-                    <span class="text-sm font-medium text-gray-600">Искать билеты</span>
-                </label>
-                <label class="flex items-center space-x-2 cursor-pointer">
-                    <input type="checkbox" v-model="search_hotels" class="rounded text-blue-600 w-4 h-4 focus:ring-blue-500 border-gray-300">
-                    <span class="text-sm font-medium text-gray-600">Искать отели</span>
-                </label>
-            </div>
-            
-            <div class="flex space-x-2">
-                <input v-model="chatInput" @keyup.enter="sendMessage" type="text" class="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" placeholder="Напишите пожелания или кликните по туру выше...">
-                <button @click="sendMessage" :disabled="loading || !chatInput.trim()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-colors disabled:bg-blue-300 disabled:cursor-not-allowed">
-                    Отправить
-                </button>
-            </div>
-        </footer>
-        
+            <footer v-if="messages.length > 0" class="absolute bottom-0 w-full pt-12 pb-6 px-4 sm:px-8 pointer-events-none" style="background:linear-gradient(to top, rgba(14,165,233,0.15), transparent)">
+                <div class="max-w-3xl mx-auto flex flex-col pointer-events-auto glass-strong rounded-3xl shadow-2xl p-2">
+                    
+                    <div class="flex items-center justify-between px-4 pb-2 pt-2 border-b border-slate-50">
+                        <div class="flex items-center space-x-5">
+                            <label class="flex items-center space-x-2 cursor-pointer group">
+                                <input type="checkbox" v-model="search_tickets" class="rounded text-sky-500 w-4 h-4 border-slate-300">
+                                <span class="text-[11px] font-black uppercase tracking-wider text-slate-400 group-hover:text-slate-700">Билеты</span>
+                            </label>
+                            <label class="flex items-center space-x-2 cursor-pointer group">
+                                <input type="checkbox" v-model="search_hotels" class="rounded text-sky-500 w-4 h-4 border-slate-300">
+                                <span class="text-[11px] font-black uppercase tracking-wider text-slate-400 group-hover:text-slate-700">Отели</span>
+                            </label>
+                        </div>
+                        <div class="text-[10px] font-bold text-slate-300 uppercase tracking-widest hidden sm:block">AI Assistant</div>
+                    </div>
+                    
+                    <div class="relative flex items-center bg-transparent p-1">
+                        <input v-model="chatInput" @keyup.enter="sendMessage" type="text" class="w-full py-4 pl-4 pr-16 outline-none bg-transparent text-slate-800 placeholder-slate-400 text-sm font-medium" placeholder="Напишите пожелание или кликните по туру выше...">
+                        <button @click="sendMessage" :disabled="loading || !chatInput.trim()" class="absolute right-2 p-3 bg-slate-900 text-white rounded-2xl hover:bg-slate-800 transition-all disabled:bg-slate-200 disabled:text-slate-400">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"></path></svg>
+                        </button>
+                    </div>
+                </div>
+            </footer>
+        </div>
     </div>
 
     <script>
-        const { createApp, ref } = Vue;
+        const { createApp, ref, onMounted } = Vue;
 
         createApp({
             setup() {
                 const query = ref('');
                 const city = ref('');
-                const dates = ref('');
+                const dateFrom = ref('');
+                const dateTo = ref('');
                 const budget = ref('');
                 const search_tickets = ref(false);
                 const search_hotels = ref(false);
                 
                 const chatInput = ref('');
-                const messages = ref([]); // {role: 'user'|'assistant', content: string, data: object}
+                const messages = ref([]);
                 const loading = ref(false);
+                const chatHistory = ref([]);
+                const currentChatId = ref(null);
+
+                const fetchChatHistory = async () => {
+                    try {
+                        const res = await fetch('/api/chats');
+                        chatHistory.value = await res.json();
+                    } catch (e) {
+                        console.error('Failed to load chat history', e);
+                    }
+                };
+
+                const saveCurrentChat = async () => {
+                    if (messages.value.length === 0) return;
+                    const firstUserMsg = messages.value.find(m => m.role === 'user');
+                    const title = firstUserMsg
+                        ? firstUserMsg.content.slice(0, 50) + (firstUserMsg.content.length > 50 ? '…' : '')
+                        : 'Без названия';
+                    const formattedDates = `${dateFrom.value} - ${dateTo.value}`;
+                    try {
+                        const res = await fetch('/api/chats', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                id: currentChatId.value,
+                                title: title,
+                                city: city.value,
+                                dates: formattedDates,
+                                messages: messages.value,
+                            })
+                        });
+                        const data = await res.json();
+                        currentChatId.value = data.id;
+                        await fetchChatHistory();
+                    } catch (e) {
+                        console.error('Failed to save chat', e);
+                    }
+                };
+
+                const loadChat = async (chatId) => {
+                    try {
+                        const res = await fetch(`/api/chats/${chatId}`);
+                        const data = await res.json();
+                        if (data.error) return;
+                        currentChatId.value = data.id;
+                        messages.value = data.messages || [];
+                        city.value = data.city || '';
+                        const dates = (data.dates || '').split(' - ');
+                        dateFrom.value = dates[0] || '';
+                        dateTo.value = dates[1] || '';
+                    } catch (e) {
+                        console.error('Failed to load chat', e);
+                    }
+                };
+
+                const deleteChat = async (chatId) => {
+                    if (!confirm('Удалить этот чат?')) return;
+                    try {
+                        await fetch(`/api/chats/${chatId}`, { method: 'DELETE' });
+                        if (currentChatId.value === chatId) {
+                            startNewChat();
+                        }
+                        await fetchChatHistory();
+                    } catch (e) {
+                        console.error('Failed to delete chat', e);
+                    }
+                };
+
+                const startNewChat = () => {
+                    currentChatId.value = null;
+                    messages.value = [];
+                    query.value = '';
+                    city.value = '';
+                    dateFrom.value = '';
+                    dateTo.value = '';
+                    budget.value = '';
+                    chatInput.value = '';
+                };
 
                 const renderMarkdown = (text) => {
                     if (!text) return '';
@@ -165,14 +340,13 @@
                 };
 
                 const selectTour = (title) => {
-                    chatInput.value = `Мне понравился тур "${title}", расскажи про него подробнее`;
-                    // Optional: automatically send the message
-                    // sendMessage();
+                    chatInput.value = `Расскажи подробнее про вариант "${title}"`;
+                    sendMessage();
                 };
 
                 const startChat = async () => {
-                    if (!query.value.trim() || !city.value.trim() || !dates.value.trim()) {
-                        alert("Пожалуйста, заполните пожелания, город и даты.");
+                    if (!query.value.trim() || !city.value.trim() || !dateFrom.value || !dateTo.value) {
+                        alert("Пожалуйста, заполните пожелания, город и выберите даты в календаре.");
                         return;
                     }
                     await sendRequest(query.value);
@@ -188,12 +362,14 @@
                 const sendRequest = async (userText) => {
                     messages.value.push({ role: 'user', content: userText });
                     loading.value = true;
+                    scrollToBottom();
 
-                    // Convert current messages to the history format backend expects
                     const history = messages.value.map(m => ({
                         role: m.role,
                         content: m.role === 'assistant' ? JSON.stringify(m.data) : m.content
-                    })).slice(0, -1); // exclude the message we just pushed
+                    })).slice(0, -1);
+
+                    const formattedDates = `${dateFrom.value} - ${dateTo.value}`;
 
                     try {
                         const response = await fetch('/api/chat', {
@@ -202,7 +378,7 @@
                             body: JSON.stringify({
                                 query: userText,
                                 city: city.value,
-                                dates: dates.value,
+                                dates: formattedDates,
                                 budget: budget.value,
                                 search_tickets: search_tickets.value,
                                 search_hotels: search_hotels.value,
@@ -216,12 +392,8 @@
                             content: 'Structured Response',
                             data: data
                         });
-
-                        // Scroll to bottom
-                        setTimeout(() => {
-                            const mainEl = document.querySelector('main');
-                            if (mainEl) mainEl.scrollTop = mainEl.scrollHeight;
-                        }, 100);
+                        scrollToBottom();
+                        await saveCurrentChat();
                         
                     } catch (error) {
                         console.error(error);
@@ -229,21 +401,36 @@
                             role: 'assistant',
                             content: 'Error',
                             data: {
-                                route_and_hotels: "Произошла ошибка при обращении к серверу.",
+                                route_and_hotels: "Ошибка связи с сервером. Проверьте соединение или API ключ.",
                                 tours: [],
                                 total_price: "-"
                             }
                         });
+                        scrollToBottom();
                     } finally {
                         loading.value = false;
                     }
                 };
 
+                const scrollToBottom = () => {
+                    setTimeout(() => {
+                        const mainEl = document.querySelector('main');
+                        if (mainEl) {
+                            mainEl.scrollTo({ top: mainEl.scrollHeight, behavior: 'smooth' });
+                        }
+                    }, 100);
+                };
+
+                onMounted(() => {
+                    fetchChatHistory();
+                });
+
                 return {
-                    query, city, dates, budget,
+                    query, city, dateFrom, dateTo, budget,
                     search_tickets, search_hotels,
-                    chatInput, messages, loading,
-                    startChat, sendMessage, selectTour, renderMarkdown
+                    chatInput, messages, loading, chatHistory, currentChatId,
+                    startChat, sendMessage, selectTour, renderMarkdown,
+                    startNewChat, loadChat, deleteChat
                 };
             }
         }).mount('#app');
