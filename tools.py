@@ -25,7 +25,7 @@ except Exception as e:
 
 YANDEX_API_KEY = os.getenv('YANDEX_API_KEY')
 AVIASALES_API_KEY = os.getenv('AVIASALES_API_KEY')
-BOOKING_API_KEY = "7d42b4d30dmsh570ecb00dc077f7p1a42d2jsn5af1e2013714"
+BOOKING_API_KEY = "3717f1718bmsh569d8a5d5e58aa1p1bf539jsn904e52774b4f"
 
 CAR_TYPES_RU = {
     'plazcard': 'Плацкарт',
@@ -214,10 +214,30 @@ def search_hotels_abroad(city, date_in, date_out):
         results = []
         if 'data' in hotels_data and 'hotels' in hotels_data['data']:
             for hotel in hotels_data['data']['hotels'][:5]:
-                name = hotel['property']['name']
-                price = hotel['property']['priceBreakdown']['grossPrice']['value']
-                currency = hotel['property']['priceBreakdown']['grossPrice']['currency']
-                results.append({"name": name, "price": price, "currency": currency})
+                prop = hotel.get('property', {})
+                name = prop.get('name', 'Без названия')
+                
+                # Извлекаем цену безопасно
+                price = "Неизвестно"
+                currency = ""
+                price_bd = prop.get('priceBreakdown', {}).get('grossPrice', {})
+                if price_bd:
+                    price = price_bd.get('value', 'Неизвестно')
+                    currency = price_bd.get('currency', '')
+                
+                # Извлекаем фото (Booking API обычно отдает photoUrls массивом)
+                photo_url = ""
+                photo_urls = prop.get('photoUrls', [])
+                if photo_urls and len(photo_urls) > 0:
+                    # Можно взять первое фото из массива
+                    photo_url = photo_urls[0]
+                
+                results.append({
+                    "name": name, 
+                    "price": price, 
+                    "currency": currency,
+                    "photo": photo_url
+                })
         return json.dumps({"hotels": results})
         
     except Exception as e:
